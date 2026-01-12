@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../home/home_screen.dart';
 import '../admin/admin_screen.dart';
-import 'forgot_password_screen.dart'; // IMPORT MÀN HÌNH QUÊN MẬT KHẨU
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -15,9 +15,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passController = TextEditingController();
   bool _isLoading = false;
   bool _isLoginMode = true;
-  bool _obscureText = true; // Tính năng ẩn/hiện mật khẩu
+  bool _obscureText = true;
 
-  // Cập nhật IP/Port backend của bạn
+  // Cấu hình Server
   final String baseUrl = "http://10.0.2.2:5231/api/auth";
 
   Future<void> _submitAuth() async {
@@ -45,16 +45,30 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.statusCode == 200) {
         if (_isLoginMode) {
           final data = jsonDecode(response.body);
+
+          // --- CẬP NHẬT QUAN TRỌNG: LẤY userId ---
           String fullName = data['fullName'] ?? "User";
           String role = data['role'] ?? "user";
+          int userId = data['userId'] ?? 0; // Lấy ID từ server trả về
 
           _showMessage("Đăng nhập thành công!", Colors.green);
 
-          Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => role == 'admin' ? AdminScreen() : HomeScreen(userName: fullName))
-          );
+          if (role == 'admin') {
+            Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => AdminScreen())
+            );
+          } else {
+            // Truyền userId sang Home để dùng cho tính năng Kết bạn/Chat
+            Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => HomeScreen(userName: fullName, userId: userId)
+                )
+            );
+          }
+          // ----------------------------------------
+
         } else {
           _showMessage("Đăng ký thành công! Mời đăng nhập.", Colors.green);
           setState(() => _isLoginMode = true);
@@ -63,6 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _showMessage("Thất bại: ${response.body}", Colors.redAccent);
       }
     } catch (e) {
+      print("Login Error: $e");
       _showMessage("Lỗi kết nối Server!", Colors.redAccent);
     } finally {
       setState(() => _isLoading = false);
@@ -86,7 +101,6 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        // Nền Gradient hiện đại
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -99,7 +113,6 @@ class _LoginScreenState extends State<LoginScreen> {
             padding: EdgeInsets.symmetric(horizontal: 30),
             child: Column(
               children: [
-                // Logo Icon
                 Container(
                   padding: EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -120,7 +133,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 SizedBox(height: 40),
 
-                // Card chứa Form
                 Container(
                   padding: EdgeInsets.all(25),
                   decoration: BoxDecoration(
@@ -149,7 +161,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         isPassword: true,
                       ),
 
-                      // --- NÚT QUÊN MẬT KHẨU (Chỉ hiện khi Đăng nhập) ---
                       if (_isLoginMode)
                         Align(
                           alignment: Alignment.centerRight,
@@ -166,11 +177,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
-                      // --------------------------------------------------
 
                       SizedBox(height: _isLoginMode ? 10 : 30),
 
-                      // Nút bấm Gradient
                       SizedBox(
                         width: double.infinity,
                         height: 55,
@@ -212,7 +221,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Widget dùng chung cho TextField
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
