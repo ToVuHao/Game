@@ -8,17 +8,19 @@ class SudokuScreen extends StatefulWidget {
 }
 
 class _SudokuScreenState extends State<SudokuScreen> {
-  // Thay PORT bằng port backend của bạn (đang là 5231)
+  // URL API (Giữ nguyên cấu hình emulator của bạn)
   final String apiUrl = "http://10.0.2.2:5231/api/sudoku/new-game";
 
   List<int> puzzle = [];
   List<int> solution = [];
-  List<int> currentBoard = [];
-  List<bool> isFixed = [];
+  List<int> currentBoard = []; // Bảng hiện tại hiển thị lên màn hình
+  List<bool> isFixed = []; // Đánh dấu các ô đề bài (không được sửa)
 
   bool isLoading = true;
+  bool isGameOver = false; // Trạng thái game
   int mistakes = 0;
-  int selectedIndex = -1;
+  final int maxMistakes = 3; // Giới hạn lỗi
+  int selectedIndex = -1; // Ô đang chọn
 
   @override
   void initState() {
@@ -26,14 +28,18 @@ class _SudokuScreenState extends State<SudokuScreen> {
     fetchGame();
   }
 
+  // Hàm lấy đề mới từ Server
   Future<void> fetchGame() async {
+    setState(() {
+      isLoading = true;
+      isGameOver = false;
+      mistakes = 0;
+      selectedIndex = -1;
+    });
+
     try {
-      print("Bắt đầu gọi API: $apiUrl"); // In log để kiểm tra
-
-      // Gọi thẳng API
+      print("Calling API: $apiUrl");
       final response = await http.get(Uri.parse(apiUrl));
-
-      print("Server trả về Code: ${response.statusCode}"); // In mã lỗi (200 là ok)
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -41,22 +47,19 @@ class _SudokuScreenState extends State<SudokuScreen> {
         setState(() {
           puzzle = List<int>.from(data['puzzle']);
           solution = List<int>.from(data['solution']);
+          // Clone puzzle sang currentBoard để người chơi điền
           currentBoard = List.from(puzzle);
+          // Đánh dấu các ô có số sẵn là Fixed
           isFixed = puzzle.map((e) => e != 0).toList();
         });
       } else {
-        print("Lỗi Server: ${response.body}"); // In nội dung lỗi nếu có
+        print("Error: ${response.statusCode}");
+        _showErrorSnackBar("Lỗi server: ${response.statusCode}");
       }
     } catch (e) {
-      print("Lỗi KẾT NỐI: $e"); // In lỗi nếu không kết nối được
-      // Nếu lỗi kết nối thì hiện thông báo nhỏ
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Lỗi kết nối Server! Xem log để biết thêm."), backgroundColor: Colors.red),
-        );
-      }
+      print("Connection error: $e");
+      _showErrorSnackBar("Không kết nối được Server!");
     } finally {
-      // QUAN TRỌNG NHẤT: Dù thành công hay thất bại cũng phải tắt Loading
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -65,34 +68,92 @@ class _SudokuScreenState extends State<SudokuScreen> {
     }
   }
 
+  void _showErrorSnackBar(String msg) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // Xử lý khi bấm số trên bàn phím
   void onNumberSelected(int number) {
-    if (selectedIndex == -1 || isFixed[selectedIndex]) return;
+    // Nếu chưa chọn ô, hoặc ô đó là ô đề bài, hoặc game đã kết thúc -> Bỏ qua
+    if (selectedIndex == -1 || isFixed[selectedIndex] || isGameOver) return;
 
     setState(() {
+      // Logic kiểm tra đúng sai ngay lập tức
       if (number != solution[selectedIndex]) {
         mistakes++;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Sai rồi!"), backgroundColor: Colors.red, duration: Duration(milliseconds: 500)),
-        );
+        if (mistakes >= maxMistakes) {
+          isGameOver = true;
+          _showGameOverDialog();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Sai rồi! Cẩn thận nhé."),
+              backgroundColor: Colors.orange,
+              duration: Duration(milliseconds: 500),
+            ),
+          );
+        }
       } else {
+        // Điền đúng
         currentBoard[selectedIndex] = number;
+        // Kiểm tra chiến thắng (không còn số 0 nào trong bảng)
         if (!currentBoard.contains(0)) {
+          isGameOver = true;
           _showWinDialog();
         }
       }
     });
   }
 
+  // Xử lý nút xóa (Clear ô đang chọn)
+  void onClear() {
+    if (selectedIndex == -1 || isFixed[selectedIndex] || isGameOver) return;
+    setState(() {
+      currentBoard[selectedIndex] = 0;
+    });
+  }
+
   void _showWinDialog() {
     showDialog(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: Text("CHIẾN THẮNG!"),
-          content: Text("Bạn quá đỉnh!"),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: Text("Đóng"))
-          ],
-        )
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Text("🎉 CHIẾN THẮNG!", style: TextStyle(color: Colors.green)),
+        content: Text("Chúc mừng bạn đã giải thành công!"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              fetchGame(); // Chơi ván mới
+            },
+            child: Text("Chơi lại"),
+          )
+        ],
+      ),
+    );
+  }
+
+  void _showGameOverDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Text("GAME OVER", style: TextStyle(color: Colors.red)),
+        content: Text("Bạn đã sai quá 3 lần. Thử lại nhé!"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              fetchGame(); // Reset game
+            },
+            child: Text("Thử lại"),
+          )
+        ],
+      ),
     );
   }
 
@@ -100,106 +161,164 @@ class _SudokuScreenState extends State<SudokuScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Sudoku"),
-        backgroundColor: Colors.green,
+        title: Text("Sudoku Game"),
+        backgroundColor: Colors.green[700],
         actions: [
-          Center(child: Padding(
-            padding: EdgeInsets.only(right: 16),
-            child: Text("Lỗi: $mistakes/3", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          ))
-        ],
-      ),
-      body: isLoading
-          ? Center(child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 10),
-          Text("Đang tải đề bài..."),
-        ],
-      ))
-          : puzzle.isEmpty // Nếu tải xong mà không có dữ liệu (do lỗi)
-          ? Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error, color: Colors.red, size: 50),
-            Text("Không tải được dữ liệu!", style: TextStyle(fontSize: 18)),
-            ElevatedButton(onPressed: fetchGame, child: Text("Thử lại"))
-          ],
-        ),
-      )
-          : Column( // Nếu có dữ liệu thì hiện bàn cờ
-        children: [
-          Expanded(
+          // Hiển thị số lỗi
+          Center(
             child: Padding(
-              padding: EdgeInsets.all(8.0),
-              child: GridView.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 9,
-                  childAspectRatio: 1.0,
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Text(
+                "Lỗi: $mistakes/$maxMistakes",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: mistakes >= 2 ? Colors.redAccent : Colors.white,
                 ),
-                itemCount: 81,
-                itemBuilder: (context, index) {
-                  int row = index ~/ 9;
-                  int col = index % 9;
-                  bool rightBorder = (col + 1) % 3 == 0 && col != 8;
-                  bool bottomBorder = (row + 1) % 3 == 0 && row != 8;
-
-                  return GestureDetector(
-                    onTap: () {
-                      if (!isFixed[index]) setState(() => selectedIndex = index);
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border(
-                          right: BorderSide(width: rightBorder ? 2 : 0.5),
-                          bottom: BorderSide(width: bottomBorder ? 2 : 0.5),
-                          left: BorderSide(width: 0.5),
-                          top: BorderSide(width: 0.5),
-                        ),
-                        color: selectedIndex == index
-                            ? Colors.green[100]
-                            : (isFixed[index] ? Colors.grey[300] : Colors.white),
-                      ),
-                      child: Center(
-                        child: Text(
-                          currentBoard[index] == 0 ? "" : currentBoard[index].toString(),
-                          style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: isFixed[index] ? FontWeight.bold : FontWeight.normal,
-                              color: isFixed[index] ? Colors.black : Colors.green
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
               ),
             ),
           ),
-          // Bàn phím số
-          Container(
-            padding: EdgeInsets.all(10),
-            color: Colors.green[50],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(9, (index) {
-                int num = index + 1;
-                return ElevatedButton(
-                  onPressed: () => onNumberSelected(num),
-                  style: ElevatedButton.styleFrom(
-                      shape: CircleBorder(),
-                      padding: EdgeInsets.all(12),
-                      backgroundColor: Colors.green
-                  ),
-                  child: Text("$num", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                );
-              }),
-            ),
-          ),
-          SizedBox(height: 20),
+          // Nút Game Mới
+          IconButton(
+            icon: Icon(Icons.refresh),
+            tooltip: "Game mới",
+            onPressed: fetchGame,
+          )
         ],
+      ),
+      body: isLoading
+          ? Center(child: CircularProgressIndicator())
+          : puzzle.isEmpty
+          ? Center(
+        child: ElevatedButton(
+          onPressed: fetchGame,
+          child: Text("Tải lại dữ liệu"),
+        ),
+      )
+          : Column(
+        children: [
+          Expanded(child: _buildSudokuGrid()),
+          _buildNumberPad(),
+        ],
+      ),
+    );
+  }
+
+  // Widget hiển thị bàn cờ
+  Widget _buildSudokuGrid() {
+    return Container(
+      padding: EdgeInsets.all(10),
+      alignment: Alignment.center,
+      child: AspectRatio(
+        aspectRatio: 1.0, // Giữ hình vuông
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.black, width: 2), // Viền ngoài cùng
+          ),
+          child: GridView.builder(
+            physics: NeverScrollableScrollPhysics(), // Tắt cuộn
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 9,
+            ),
+            itemCount: 81,
+            itemBuilder: (context, index) {
+              int row = index ~/ 9;
+              int col = index % 9;
+
+              // Logic vẽ viền đậm chia khối 3x3
+              bool borderRight = (col + 1) % 3 == 0 && col != 8;
+              bool borderBottom = (row + 1) % 3 == 0 && row != 8;
+
+              bool isSelected = index == selectedIndex;
+              bool isOriginal = isFixed[index];
+              int value = currentBoard[index];
+
+              return GestureDetector(
+                onTap: () {
+                  if (!isGameOver) {
+                    setState(() => selectedIndex = index);
+                  }
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.green[200] // Màu ô đang chọn
+                        : (isOriginal ? Colors.grey[300] : Colors.white),
+                    border: Border(
+                      right: BorderSide(
+                        width: borderRight ? 2.0 : 0.5,
+                        color: borderRight ? Colors.black : Colors.grey,
+                      ),
+                      bottom: BorderSide(
+                        width: borderBottom ? 2.0 : 0.5,
+                        color: borderBottom ? Colors.black : Colors.grey,
+                      ),
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      value == 0 ? "" : value.toString(),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: isOriginal ? FontWeight.bold : FontWeight.w500,
+                        color: isOriginal ? Colors.black : Colors.blue[800],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Widget bàn phím số
+  Widget _buildNumberPad() {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 20, horizontal: 10),
+      color: Colors.green[50],
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(9, (index) {
+              return _buildKeyButton(index + 1);
+            }),
+          ),
+          SizedBox(height: 10),
+          // Nút Xóa riêng biệt
+          ElevatedButton.icon(
+            onPressed: onClear,
+            icon: Icon(Icons.backspace_outlined),
+            label: Text("Xóa ô"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  // Nút số tròn
+  Widget _buildKeyButton(int number) {
+    return SizedBox(
+      width: 35,
+      height: 35, // Giảm kích thước xíu để vừa màn hình nhỏ
+      child: ElevatedButton(
+        onPressed: () => onNumberSelected(number),
+        style: ElevatedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          shape: CircleBorder(),
+          backgroundColor: Colors.green[700],
+        ),
+        child: Text(
+          "$number",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }

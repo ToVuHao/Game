@@ -11,18 +11,20 @@ class Piece {
 }
 
 class XiangqiScreen extends StatefulWidget {
+  const XiangqiScreen({super.key});
+
   @override
-  _XiangqiScreenState createState() => _XiangqiScreenState();
+  State<XiangqiScreen> createState() => _XiangqiScreenState();
 }
 
 class _XiangqiScreenState extends State<XiangqiScreen> {
-  // Kích thước bàn cờ
   final int rows = 10;
   final int cols = 9;
 
   List<Piece> pieces = [];
-  Piece? selectedPiece; // Quân cờ đang được chọn
-  bool isRedTurn = true; // Lượt đi
+  Piece? selectedPiece;
+  bool isRedTurn = true;
+  bool isGameOver = false;
 
   @override
   void initState() {
@@ -30,16 +32,13 @@ class _XiangqiScreenState extends State<XiangqiScreen> {
     _initBoard();
   }
 
-  // Khởi tạo bàn cờ tiêu chuẩn
   void _initBoard() {
     pieces.clear();
-    // --- QUÂN ĐEN (Ở trên) ---
     Color black = Colors.black;
     _addRow(0, black, ["Xe", "Mã", "Tượng", "Sĩ", "Tướng", "Sĩ", "Tượng", "Mã", "Xe"]);
     _addPiece(2, 1, "Pháo", black); _addPiece(2, 7, "Pháo", black);
     _addPiece(3, 0, "Tốt", black); _addPiece(3, 2, "Tốt", black); _addPiece(3, 4, "Tốt", black); _addPiece(3, 6, "Tốt", black); _addPiece(3, 8, "Tốt", black);
 
-    // --- QUÂN ĐỎ (Ở dưới) ---
     Color red = Colors.red[900]!;
     _addRow(9, red, ["Xe", "Mã", "Tượng", "Sĩ", "Tướng", "Sĩ", "Tượng", "Mã", "Xe"]);
     _addPiece(7, 1, "Pháo", red); _addPiece(7, 7, "Pháo", red);
@@ -48,6 +47,7 @@ class _XiangqiScreenState extends State<XiangqiScreen> {
     setState(() {
       isRedTurn = true;
       selectedPiece = null;
+      isGameOver = false;
     });
   }
 
@@ -61,93 +61,197 @@ class _XiangqiScreenState extends State<XiangqiScreen> {
     pieces.add(Piece(text: text, color: color, row: r, col: c));
   }
 
-  // Xử lý khi bấm vào ô bàn cờ
-  void _onTapCell(int r, int c) {
-    // Tìm xem ô đó có quân nào không
-    Piece? tappedPiece;
-    try {
-      tappedPiece = pieces.firstWhere((p) => p.row == r && p.col == c);
-    } catch (e) {
-      tappedPiece = null;
+  // --- KIỂM TRA LUẬT DI CHUYỂN ---
+  bool _isValidMove(Piece piece, int targetRow, int targetCol) {
+    int dr = (targetRow - piece.row).abs();
+    int dc = (targetCol - piece.col).abs();
+    bool isRed = piece.color == Colors.red[900];
+
+    // Kiểm tra xem ô mục tiêu có quân cùng màu không
+    Piece? targetPiece = _getPieceAt(targetRow, targetCol);
+    if (targetPiece != null && targetPiece.color == piece.color) return false;
+
+    switch (piece.text) {
+      case "Tướng":
+      // Trong cung: Red (7-9, 3-5), Black (0-2, 3-5)
+        if (targetCol < 3 || targetCol > 5) return false;
+        if (isRed && (targetRow < 7 || targetRow > 9)) return false;
+        if (!isRed && (targetRow < 0 || targetRow > 2)) return false;
+        return (dr + dc == 1); // Đi 1 ô ngang hoặc dọc
+
+      case "Sĩ":
+      // Trong cung, đi chéo 1 ô
+        if (targetCol < 3 || targetCol > 5) return false;
+        if (isRed && (targetRow < 7 || targetRow > 9)) return false;
+        if (!isRed && (targetRow < 0 || targetRow > 2)) return false;
+        return (dr == 1 && dc == 1);
+
+      case "Tượng":
+// Đi chéo đúng 2 ô, không qua sông, không bị cản (mắt tượng)
+        if (dr != 2 || dc != 2) return false;
+        if (isRed && targetRow < 5) return false;
+        if (!isRed && targetRow > 4) return false;
+        // Kiểm tra cản (mắt tượng)
+        if (_getPieceAt((piece.row + targetRow) ~/ 2, (piece.col + targetCol) ~/ 2) != null) return false;
+        return true;
+
+      case "Mã":
+      // Đi hình chữ L (2-1), kiểm tra cản (chân mã)
+        if (!((dr == 2 && dc == 1) || (dr == 1 && dc == 2))) return false;
+        if (dr == 2) {
+          if (_getPieceAt((piece.row + targetRow) ~/ 2, piece.col) != null) return false;
+        } else {
+          if (_getPieceAt(piece.row, (piece.col + targetCol) ~/ 2) != null) return false;
+        }
+        return true;
+
+      case "Xe":
+      // Đi ngang/dọc, không có quân cản
+        if (dr != 0 && dc != 0) return false;
+        return _countPiecesBetween(piece.row, piece.col, targetRow, targetCol) == 0;
+
+      case "Pháo":
+        if (dr != 0 && dc != 0) return false;
+        int count = _countPiecesBetween(piece.row, piece.col, targetRow, targetCol);
+        if (targetPiece == null) return count == 0; // Di chuyển: không có quân cản
+        return count == 1; // Ăn quân: phải nhảy qua đúng 1 quân
+
+      case "Tốt":
+        if (isRed) {
+          if (targetRow > piece.row) return false; // Không đi lùi
+          if (piece.row >= 5) return dr == 1 && dc == 0; // Chưa qua sông: chỉ tiến
+          return (dr + dc == 1) && targetRow <= piece.row; // Qua sông: tiến/ngang
+        } else {
+          if (targetRow < piece.row) return false;
+          if (piece.row <= 4) return dr == 1 && dc == 0;
+          return (dr + dc == 1) && targetRow >= piece.row;
+        }
     }
+    return false;
+  }
+
+  Piece? _getPieceAt(int r, int c) {
+    try { return pieces.firstWhere((p) => p.row == r && p.col == c); } catch (_) { return null; }
+  }
+
+  int _countPiecesBetween(int r1, int c1, int r2, int c2) {
+    int count = 0;
+    if (r1 == r2) {
+      int start = c1 < c2 ? c1 : c2;
+      int end = c1 < c2 ? c2 : c1;
+      for (int i = start + 1; i < end; i++) {
+        if (_getPieceAt(r1, i) != null) count++;
+      }
+    } else {
+      int start = r1 < r2 ? r1 : r2;
+      int end = r1 < r2 ? r2 : r1;
+      for (int i = start + 1; i < end; i++) {
+        if (_getPieceAt(i, c1) != null) count++;
+      }
+    }
+    return count;
+  }
+
+  void _onTapCell(int r, int c) {
+    if (isGameOver) return; // Nếu game kết thúc thì không cho bấm nữa
+
+    Piece? tappedPiece = _getPieceAt(r, c);
 
     setState(() {
-      // TRƯỜNG HỢP 1: Chưa chọn quân nào -> Chọn quân
       if (selectedPiece == null) {
         if (tappedPiece != null) {
-          // Chỉ được chọn quân đúng lượt (Đỏ hoặc Đen)
           if ((isRedTurn && tappedPiece.color == Colors.red[900]) ||
               (!isRedTurn && tappedPiece.color == Colors.black)) {
             selectedPiece = tappedPiece;
           }
         }
-      }
-      // TRƯỜNG HỢP 2: Đã chọn quân -> Di chuyển hoặc Ăn quân
-      else {
-        // Nếu bấm lại chính nó -> Bỏ chọn
+      } else {
         if (tappedPiece == selectedPiece) {
           selectedPiece = null;
           return;
         }
-
-        // Nếu bấm vào quân cùng màu -> Đổi sang chọn quân đó
         if (tappedPiece != null && tappedPiece.color == selectedPiece!.color) {
           selectedPiece = tappedPiece;
           return;
         }
 
-        // --- THỰC HIỆN NƯỚC ĐI (Di chuyển hoặc Ăn) ---
-        // Xóa quân bị ăn (nếu có)
-        if (tappedPiece != null) {
-          pieces.remove(tappedPiece);
+        // KIỂM TRA LUẬT TẠI ĐÂY
+        if (_isValidMove(selectedPiece!, r, c)) {
+          bool kingEaten = false;
+          String winnerText = "";
+
+          if (tappedPiece != null) {
+            if (tappedPiece.text == "Tướng") {
+              kingEaten = true;
+              winnerText = tappedPiece.color == Colors.black ? "ĐỎ THẮNG!" : "ĐEN THẮNG!";
+            }
+            pieces.remove(tappedPiece);
+          }
+
+          selectedPiece!.row = r;
+          selectedPiece!.col = c;
+
+          if (kingEaten) {
+            isGameOver = true;
+            _showEndDialog(winnerText);
+          } else {
+            isRedTurn = !isRedTurn;
+          }
+          selectedPiece = null;
         }
-
-        // Cập nhật vị trí mới
-        selectedPiece!.row = r;
-        selectedPiece!.col = c;
-
-        // Đổi lượt & Bỏ chọn
-        isRedTurn = !isRedTurn;
-        selectedPiece = null;
       }
     });
   }
 
+  void _showEndDialog(String title) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Colors.brown)),
+        content: const Text("Ván cờ đã kết thúc. Bạn có muốn chơi ván mới không?"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _initBoard();
+            },
+            child: const Text("Chơi lại", style: TextStyle(fontSize: 18)),
+          )
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Tính toán kích thước ô dựa trên màn hình
-    double boardWidth = MediaQuery.of(context).size.width - 32; // Padding 16*2
+    double boardWidth = MediaQuery.of(context).size.width - 32;
     double cellSize = boardWidth / 9;
 
     return Scaffold(
       backgroundColor: Colors.amber[100],
       appBar: AppBar(
-        title: Text("Cờ Tướng"),
+        title: const Text("Cờ Tướng"),
         backgroundColor: Colors.brown,
-        actions: [
-          IconButton(icon: Icon(Icons.refresh), onPressed: _initBoard)
-        ],
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: _initBoard)],
       ),
       body: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Hiển thị lượt đi
             Container(
-              padding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
               decoration: BoxDecoration(
                   color: isRedTurn ? Colors.red[100] : Colors.grey[400],
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: isRedTurn ? Colors.red : Colors.black, width: 2)
+                  border: Border.all(color: isRedTurn ? Colors.red! : Colors.black, width: 2)
               ),
               child: Text(
                 isRedTurn ? "Lượt ĐỎ đi" : "Lượt ĐEN đi",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isRedTurn ? Colors.red[900] : Colors.black),
               ),
             ),
-            SizedBox(height: 20),
-
-            // --- BÀN CỜ ---
+            const SizedBox(height: 20),
             Expanded(
               child: Center(
                 child: Container(
@@ -155,35 +259,32 @@ class _XiangqiScreenState extends State<XiangqiScreen> {
                   height: cellSize * 10,
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.brown, width: 2),
-                    color: Colors.orange[50], // Màu nền bàn cờ
+                    color: Colors.orange[50],
                   ),
                   child: Stack(
                     children: [
-                      // Lớp 1: Vẽ Lưới Bàn Cờ
                       CustomPaint(
                         size: Size(boardWidth, cellSize * 10),
                         painter: BoardPainter(cellSize: cellSize),
                       ),
-
-                      // Lớp 2: Vẽ các quân cờ
-                      ...pieces.map((p) {
-                        return Positioned(
+                      for (var p in pieces)
+                        Positioned(
                           left: p.col * cellSize,
                           top: p.row * cellSize,
                           width: cellSize,
                           height: cellSize,
                           child: GestureDetector(
-                            onTap: () => _onTapCell(p.row, p.col), // Bấm vào quân để chọn
+                            onTap: () => _onTapCell(p.row, p.col),
                             child: Container(
-                              margin: EdgeInsets.all(2),
+                              margin: const EdgeInsets.all(2),
                               decoration: BoxDecoration(
-                                  color: Colors.orange[100], // Màu nền quân cờ
+                                  color: Colors.orange[100],
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                      color: p == selectedPiece ? Colors.blue : p.color, // Viền xanh nếu đang chọn
+                                      color: p == selectedPiece ? Colors.blue : p.color,
                                       width: p == selectedPiece ? 3 : 2
                                   ),
-                                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1,1))]
+                                  boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(1,1))]
                               ),
                               child: Center(
                                 child: Text(
@@ -191,24 +292,17 @@ class _XiangqiScreenState extends State<XiangqiScreen> {
                                   style: TextStyle(
                                       color: p.color,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: cellSize * 0.4 // Chữ to theo ô
+                                      fontSize: cellSize * 0.4
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        );
-                      }).toList(),
-
-                      // Lớp 3: Bắt sự kiện bấm vào ô trống
-                      // (Tạo lớp lưới trong suốt đè lên để nhận sự kiện khi bấm vào chỗ không có quân)
+                        ),
                       ...List.generate(90, (index) {
                         int r = index ~/ 9;
                         int c = index % 9;
-                        // Chỉ tạo vùng bấm nếu ô đó không có quân (để tránh đè sự kiện của quân cờ)
-                        bool hasPiece = pieces.any((p) => p.row == r && p.col == c);
-                        if (hasPiece) return SizedBox();
-
+                        if (pieces.any((p) => p.row == r && p.col == c)) return const SizedBox();
                         return Positioned(
                           left: c * cellSize,
                           top: r * cellSize,
@@ -232,7 +326,6 @@ class _XiangqiScreenState extends State<XiangqiScreen> {
   }
 }
 
-// Bộ vẽ lưới bàn cờ (CustomPainter)
 class BoardPainter extends CustomPainter {
   final double cellSize;
   BoardPainter({required this.cellSize});
@@ -244,30 +337,21 @@ class BoardPainter extends CustomPainter {
     double height = size.height;
     double halfCell = cellSize / 2;
 
-    // Vẽ các đường ngang (10 đường)
     for (int i = 0; i < 10; i++) {
       double y = i * cellSize + halfCell;
       canvas.drawLine(Offset(halfCell, y), Offset(width - halfCell, y), paint);
     }
-
-    // Vẽ các đường dọc (9 đường)
     for (int i = 0; i < 9; i++) {
       double x = i * cellSize + halfCell;
-      // Nửa trên (Bên Đen)
       canvas.drawLine(Offset(x, halfCell), Offset(x, cellSize * 4 + halfCell), paint);
-      // Nửa dưới (Bên Đỏ)
       canvas.drawLine(Offset(x, cellSize * 5 + halfCell), Offset(x, height - halfCell), paint);
     }
+    canvas.drawLine(Offset(halfCell, halfCell), Offset(halfCell, height - halfCell), paint);
+    canvas.drawLine(Offset(width - halfCell, halfCell), Offset(width - halfCell, height - halfCell), paint);
 
-    // Vẽ khung bao ngoài (để nối liền 2 bên sông)
-    canvas.drawLine(Offset(halfCell, halfCell), Offset(halfCell, height - halfCell), paint); // Dọc trái
-    canvas.drawLine(Offset(width - halfCell, halfCell), Offset(width - halfCell, height - halfCell), paint); // Dọc phải
-
-    // Vẽ Cửu cung (Chéo ở khu vua) - Bên trên
+    // Cửu cung
     canvas.drawLine(Offset(3 * cellSize + halfCell, 0 * cellSize + halfCell), Offset(5 * cellSize + halfCell, 2 * cellSize + halfCell), paint);
     canvas.drawLine(Offset(5 * cellSize + halfCell, 0 * cellSize + halfCell), Offset(3 * cellSize + halfCell, 2 * cellSize + halfCell), paint);
-
-    // Vẽ Cửu cung - Bên dưới
     canvas.drawLine(Offset(3 * cellSize + halfCell, 9 * cellSize + halfCell), Offset(5 * cellSize + halfCell, 7 * cellSize + halfCell), paint);
     canvas.drawLine(Offset(5 * cellSize + halfCell, 9 * cellSize + halfCell), Offset(3 * cellSize + halfCell, 7 * cellSize + halfCell), paint);
   }
