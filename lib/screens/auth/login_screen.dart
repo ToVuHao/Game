@@ -14,6 +14,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passController = TextEditingController();
   bool _isLoading = false;
   bool _isLoginMode = true;
+  bool _obscureText = true; // Thêm tính năng ẩn/hiện mật khẩu
 
   final String baseUrl = "http://10.0.2.2:5231/api/auth";
 
@@ -35,9 +36,7 @@ class _LoginScreenState extends State<LoginScreen> {
         body: jsonEncode({
           "username": _userController.text,
           "password": _passController.text,
-          // --- SỬA Ở ĐÂY: Đổi tên mặc định ---
           "fullName": _isLoginMode ? "" : "Tài khoản người chơi"
-          // ----------------------------------
         }),
       );
 
@@ -49,27 +48,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
           _showMessage("Đăng nhập thành công!", Colors.green);
 
-          if (role == 'admin') {
-            Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => AdminScreen())
-            );
-          } else {
-            Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => HomeScreen(userName: fullName))
-            );
-          }
+          Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => role == 'admin' ? AdminScreen() : HomeScreen(userName: fullName))
+          );
         } else {
           _showMessage("Đăng ký thành công! Mời đăng nhập.", Colors.green);
           setState(() => _isLoginMode = true);
         }
       } else {
-        _showMessage("Thất bại: ${response.body}", Colors.red);
+        _showMessage("Thất bại: ${response.body}", Colors.redAccent);
       }
     } catch (e) {
-      print("Lỗi kết nối: $e");
-      _showMessage("Lỗi kết nối Server!", Colors.red);
+      _showMessage("Lỗi kết nối Server!", Colors.redAccent);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -77,81 +69,159 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showMessage(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: color),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // ... (Giữ nguyên phần giao diện bên dưới của bạn)
     return Scaffold(
-      backgroundColor: Colors.blue.shade50,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(24),
-          child: Card(
-            elevation: 8,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            child: Padding(
-              padding: EdgeInsets.all(30),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.gamepad_rounded, size: 80, color: Colors.blueAccent),
-                  SizedBox(height: 10),
-                  Text(
-                    "GAME APP",
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blue[900]),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        // Nền Gradient hiện đại
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.blue.shade900, Colors.blue.shade400, Colors.blue.shade200],
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: 30),
+            child: Column(
+              children: [
+                // Logo Icon với hiệu ứng đổ bóng
+                Container(
+                  padding: EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
                   ),
-                  SizedBox(height: 30),
-                  TextField(
-                    controller: _userController,
-                    decoration: InputDecoration(
-                      labelText: "Tên đăng nhập",
-                      prefixIcon: Icon(Icons.person),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
+                  child: Icon(Icons.gamepad_rounded, size: 80, color: Colors.white),
+                ),
+                SizedBox(height: 20),
+                Text(
+                  _isLoginMode ? "WELCOME BACK" : "CREATE ACCOUNT",
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
                   ),
-                  SizedBox(height: 15),
-                  TextField(
-                    controller: _passController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: "Mật khẩu",
-                      prefixIcon: Icon(Icons.lock),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
+                ),
+                SizedBox(height: 40),
+
+                // Card chứa Form
+                Container(
+                  padding: EdgeInsets.all(25),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 15,
+                        offset: Offset(0, 10),
+                      )
+                    ],
                   ),
-                  SizedBox(height: 25),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _submitAuth,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: Column(
+                    children: [
+                      _buildTextField(
+                        controller: _userController,
+                        label: "Tên đăng nhập",
+                        icon: Icons.person_outline,
                       ),
-                      child: _isLoading
-                          ? CircularProgressIndicator(color: Colors.white)
-                          : Text(
-                        _isLoginMode ? "ĐĂNG NHẬP" : "ĐĂNG KÝ",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      SizedBox(height: 20),
+                      _buildTextField(
+                        controller: _passController,
+                        label: "Mật khẩu",
+                        icon: Icons.lock_outline,
+                        isPassword: true,
                       ),
-                    ),
+                      SizedBox(height: 30),
+
+                      // Nút bấm Gradient
+                      SizedBox(
+                        width: double.infinity,
+                        height: 55,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _submitAuth,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade700,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            elevation: 5,
+                          ),
+                          child: _isLoading
+                              ? CircularProgressIndicator(color: Colors.white)
+                              : Text(
+                            _isLoginMode ? "ĐĂNG NHẬP" : "ĐĂNG KÝ",
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  SizedBox(height: 15),
-                  TextButton(
-                    onPressed: () => setState(() => _isLoginMode = !_isLoginMode),
-                    child: Text(
-                      _isLoginMode ? "Chưa có tài khoản? Đăng ký ngay" : "Đã có tài khoản? Đăng nhập",
-                      style: TextStyle(fontSize: 16, color: Colors.blue[800]),
-                    ),
-                  )
-                ],
-              ),
+                ),
+
+                SizedBox(height: 20),
+                TextButton(
+                  onPressed: () => setState(() => _isLoginMode = !_isLoginMode),
+                  child: Text(
+                    _isLoginMode ? "Chưa có tài khoản? Đăng ký ngay" : "Đã có tài khoản? Đăng nhập",
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // Widget dùng chung cho TextField để code gọn hơn
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool isPassword = false,
+  }) {
+    return TextFormField(
+      controller: controller,
+      obscureText: isPassword ? _obscureText : false,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: Colors.blue.shade700),
+        suffixIcon: isPassword
+            ? IconButton(
+          icon: Icon(_obscureText ? Icons.visibility : Icons.visibility_off),
+          onPressed: () => setState(() => _obscureText = !_obscureText),
+        )
+            : null,
+        filled: true,
+        fillColor: Colors.grey.shade100,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(color: Colors.transparent),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(color: Colors.blue.shade700, width: 2),
         ),
       ),
     );
