@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../home/home_screen.dart';
 import '../admin/admin_screen.dart';
+import 'forgot_password_screen.dart'; // IMPORT MÀN HÌNH QUÊN MẬT KHẨU
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -14,8 +15,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passController = TextEditingController();
   bool _isLoading = false;
   bool _isLoginMode = true;
-  bool _obscureText = true; // Thêm tính năng ẩn/hiện mật khẩu
+  bool _obscureText = true; // Tính năng ẩn/hiện mật khẩu
 
+  // Cập nhật IP/Port backend của bạn
   final String baseUrl = "http://10.0.2.2:5231/api/auth";
 
   Future<void> _submitAuth() async {
@@ -97,7 +99,7 @@ class _LoginScreenState extends State<LoginScreen> {
             padding: EdgeInsets.symmetric(horizontal: 30),
             child: Column(
               children: [
-                // Logo Icon với hiệu ứng đổ bóng
+                // Logo Icon
                 Container(
                   padding: EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -136,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       _buildTextField(
                         controller: _userController,
-                        label: "Tên đăng nhập",
+                        label: "Tên đăng nhập / Email",
                         icon: Icons.person_outline,
                       ),
                       SizedBox(height: 20),
@@ -146,7 +148,27 @@ class _LoginScreenState extends State<LoginScreen> {
                         icon: Icons.lock_outline,
                         isPassword: true,
                       ),
-                      SizedBox(height: 30),
+
+                      // --- NÚT QUÊN MẬT KHẨU (Chỉ hiện khi Đăng nhập) ---
+                      if (_isLoginMode)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => ForgotPasswordScreen())
+                              );
+                            },
+                            child: Text(
+                                "Quên mật khẩu?",
+                                style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold)
+                            ),
+                          ),
+                        ),
+                      // --------------------------------------------------
+
+                      SizedBox(height: _isLoginMode ? 10 : 30),
 
                       // Nút bấm Gradient
                       SizedBox(
@@ -190,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Widget dùng chung cho TextField để code gọn hơn
+  // Widget dùng chung cho TextField
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
