@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'sudoku_screen.dart'; // Import màn hình Sudoku
-import 'puzzle_screen.dart'; // Import màn hình Xếp hình
-import 'caro_screen.dart';   // Import màn hình Caro
-import 'xiangqi_screen.dart'; // Import màn hình Cờ tướng
-import 'leaderboard_screen.dart'; // Import màn hình Bảng xếp hạng
-import 'chat_screen.dart'; // Import màn hình Chat
-import 'login_screen.dart'; // QUAN TRỌNG: Import màn hình Đăng nhập để quay về
 
+// --- GAME (Nằm trong thư mục games) ---
+import '../games/sudoku/sudoku_screen.dart';
+import '../games/puzzle/puzzle_screen.dart';
+import '../games/caro/caro_screen.dart';
+import '../games/xiangqi/xiangqi_screen.dart';
+
+// --- TÍNH NĂNG KHÁC (Nằm trong các thư mục riêng) ---
+import '../leaderboard/leaderboard_screen.dart';
+import '../chat/chat_screen.dart';
+import '../auth/login_screen.dart'; // Import màn hình Đăng nhập để quay về
 class HomeScreen extends StatelessWidget {
   final String userName;
 

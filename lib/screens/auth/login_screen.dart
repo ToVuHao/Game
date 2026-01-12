@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'home_screen.dart';
+import '../home/home_screen.dart';
+import '../admin/admin_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -12,12 +13,9 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
   bool _isLoading = false;
-  bool _isLoginMode = true; // True: Đăng nhập, False: Đăng ký
+  bool _isLoginMode = true;
 
-  // --- CẤU HÌNH KẾT NỐI SERVER ---
-  // Lưu ý: Backend bạn đang chạy port 5231
   final String baseUrl = "http://10.0.2.2:5231/api/auth";
-  // -------------------------------
 
   Future<void> _submitAuth() async {
     if (_userController.text.isEmpty || _passController.text.isEmpty) {
@@ -27,49 +25,51 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // Xác định là gọi API đăng nhập hay đăng ký
     final endpoint = _isLoginMode ? "/login" : "/register";
     final url = Uri.parse(baseUrl + endpoint);
 
     try {
-      print("Đang gọi API: $url"); // Log để kiểm tra
-
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "username": _userController.text,
           "password": _passController.text,
-          "fullName": _isLoginMode ? "" : "Người Chơi Mới"
+          // --- SỬA Ở ĐÂY: Đổi tên mặc định ---
+          "fullName": _isLoginMode ? "" : "Tài khoản người chơi"
+          // ----------------------------------
         }),
       );
 
-      print("Kết quả: ${response.statusCode} - ${response.body}");
-
       if (response.statusCode == 200) {
         if (_isLoginMode) {
-          // --- ĐĂNG NHẬP THÀNH CÔNG ---
           final data = jsonDecode(response.body);
-          String fullName = data['name'] ?? "User";
+          String fullName = data['fullName'] ?? "User";
+          String role = data['role'] ?? "user";
 
           _showMessage("Đăng nhập thành công!", Colors.green);
 
-          // Chuyển sang màn hình chính
-          Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => HomeScreen(userName: fullName))
-          );
+          if (role == 'admin') {
+            Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => AdminScreen())
+            );
+          } else {
+            Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => HomeScreen(userName: fullName))
+            );
+          }
         } else {
-          // --- ĐĂNG KÝ THÀNH CÔNG ---
           _showMessage("Đăng ký thành công! Mời đăng nhập.", Colors.green);
-          setState(() => _isLoginMode = true); // Chuyển về màn hình đăng nhập
+          setState(() => _isLoginMode = true);
         }
       } else {
         _showMessage("Thất bại: ${response.body}", Colors.red);
       }
     } catch (e) {
       print("Lỗi kết nối: $e");
-      _showMessage("Không kết nối được Server. Hãy kiểm tra Backend!", Colors.red);
+      _showMessage("Lỗi kết nối Server!", Colors.red);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -83,6 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ... (Giữ nguyên phần giao diện bên dưới của bạn)
     return Scaffold(
       backgroundColor: Colors.blue.shade50,
       body: Center(
